@@ -1,8 +1,8 @@
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 // This endpoint looks up a user's email by their username using the database
-// Uses service role to bypass RLS for unauthenticated username lookups
+// Uses anon key for public username lookups (profiles table has public read RLS policy)
 export async function POST(request: Request) {
   try {
     const { identifier } = await request.json()
@@ -17,14 +17,14 @@ export async function POST(request: Request) {
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !supabaseAnonKey) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
-    // Use service role client for unauthenticated lookup
-    const supabase = createServiceClient(supabaseUrl, serviceRoleKey)
+    // Use anon key client - profiles table has public read access via RLS
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
     // Search for user by username in the profiles table (case-insensitive)
     const { data: profile, error } = await supabase
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (error) {
-      console.error('Supabase error:', error)
+      console.error('[v0] Supabase error:', error)
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ email: profile.email })
   } catch (error) {
-    console.error('Error in lookup API:', error)
+    console.error('[v0] Error in lookup API:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
