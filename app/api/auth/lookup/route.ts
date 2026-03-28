@@ -1,7 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 // This endpoint looks up a user's email by their username using the database
+// Uses service role to bypass RLS for unauthenticated username lookups
 export async function POST(request: Request) {
   try {
     const { identifier } = await request.json()
@@ -15,11 +16,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ email: identifier })
     }
 
-    const supabase = await createClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
+
+    // Use service role client for unauthenticated lookup
+    const supabase = createServiceClient(supabaseUrl, serviceRoleKey)
 
     // Search for user by username in the profiles table (case-insensitive)
-    console.log('[v0] Looking up user with identifier:', identifier)
-    
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('email')
@@ -27,10 +34,8 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle()
 
-    console.log('[v0] Lookup result:', { profile, error })
-
     if (error) {
-      console.error('[v0] Supabase error:', error)
+      console.error('Supabase error:', error)
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
